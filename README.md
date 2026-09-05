@@ -14,8 +14,18 @@
 | r/teslainvestorsclub · r/TeslaMotors · r/stocks | 개인 투자자 여론 |
 | Yahoo Finance / stooq | TSLA 시세 (전일 대비 등락) |
 
-수집한 기사는 최근 24시간 내로 거르고, 제목이 같은 중복 기사를 합친 뒤
-6개 카테고리로 나눠 보냅니다.
+수집한 기사는 최근 24시간 내로 거르고, 스팸을 걷어낸 뒤, 제목이 같은
+중복 기사를 합쳐 6개 카테고리로 나눠 보냅니다.
+
+걸러내는 스팸은 두 종류입니다.
+
+- **기관 지분공시(13F) 자동 생성 기사** — `Makes New Investment in Tesla`,
+  `Shares Sold by …`, `Acquires 12,500 Shares of …` 같은 템플릿 제목. MarketBeat
+  계열이 매일 수십 건씩 찍어냅니다.
+- **콘텐츠팜·가십 매체** — 머스크 연애사, 바이럴 영상 요약 같은 기사
+
+실적 발표, 인수 소식, `Ark Invest sells $110 million in Tesla stock` 같은 실제
+기관 매매 뉴스는 걸러지지 않습니다(테스트로 고정해 두었습니다).
 
 - 🎯 애널리스트·투자의견 (목표주가, 등급 상하향, 커버리지 개시)
 - 💰 실적·재무 (인도량, 매출, 마진, 가이던스)
@@ -81,6 +91,8 @@ python -m pytest tests -q
 ## 손보기 좋은 곳
 
 - 소스 추가/제거 → `tesla_news/feeds.py`의 `SOURCES`
+- 스팸 필터 → `tesla_news/feeds.py`의 `SPAM_TITLE`(제목 패턴), `SPAM_SOURCE`(매체 이름).
+  거슬리는 매체가 새로 보이면 `SPAM_SOURCE`에 이름 한 조각만 추가하면 됩니다
 - 카테고리 분류 키워드 → `tesla_news/report.py`의 `CATEGORIES`
 - 카테고리당 표시 개수 → `report.MAX_PER_CATEGORY` (기본 8건)
 - 발송 시각 → `.github/workflows/tesla-news-daily.yml`의 `cron` (UTC 기준)
