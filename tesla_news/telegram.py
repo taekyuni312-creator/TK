@@ -23,4 +23,9 @@ def send(chunks: list[str]) -> None:
                 "disable_web_page_preview": "true",
             },
         )
-        response.raise_for_status()
+        if not response.ok:
+            # 텔레그램은 실패 사유를 응답 본문의 description 에 담아준다.
+            # raise_for_status() 는 이걸 버리므로 직접 꺼내 로그에 남긴다.
+            raise RuntimeError(
+                f"텔레그램 전송 실패 (HTTP {response.status_code}): {response.text}"
+            )

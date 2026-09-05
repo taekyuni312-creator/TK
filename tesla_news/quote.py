@@ -24,9 +24,9 @@ class Quote:
         return self.change / self.previous_close * 100
 
 
-def _from_yahoo() -> Quote:
+def _from_yahoo(host: str) -> Quote:
     response = requests.get(
-        "https://query1.finance.yahoo.com/v8/finance/chart/TSLA?range=1d&interval=1d",
+        f"https://{host}/v8/finance/chart/TSLA?range=1d&interval=1d",
         timeout=TIMEOUT,
         headers={"User-Agent": USER_AGENT},
     )
@@ -41,7 +41,7 @@ def _from_yahoo() -> Quote:
 
 def _from_stooq() -> Quote:
     response = requests.get(
-        "https://stooq.com/q/l/?s=tsla.us&f=sd2t2ohlc&h&e=csv",
+        "https://stooq.com/q/l/?s=tsla.us&f=sd2t2ohlcv&h&e=csv",
         timeout=TIMEOUT,
         headers={"User-Agent": USER_AGENT},
     )
@@ -55,10 +55,18 @@ def _from_stooq() -> Quote:
     )
 
 
+# 야후는 GitHub 러너 IP에 429를 잘 던진다. 호스트를 바꿔 한 번 더 시도한 뒤 stooq로 넘어간다.
+PROVIDERS = (
+    ("Yahoo query1", lambda: _from_yahoo("query1.finance.yahoo.com")),
+    ("Yahoo query2", lambda: _from_yahoo("query2.finance.yahoo.com")),
+    ("stooq", _from_stooq),
+)
+
+
 def fetch() -> Quote | None:
-    for provider in (_from_yahoo, _from_stooq):
+    for name, provider in PROVIDERS:
         try:
             return provider()
         except (requests.RequestException, KeyError, ValueError, IndexError) as exc:
-            print(f"[warn] 시세 조회 실패 ({provider.__name__}): {exc}")
+            print(f"[warn] 시세 조회 실패 ({name}): {exc}")
     return None

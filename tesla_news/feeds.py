@@ -140,12 +140,18 @@ def parse_feed(name: str, body: str) -> list[Article]:
     return articles
 
 
+def _headers(url: str) -> dict[str, str]:
+    # 레딧은 브라우저를 흉내 낸 요청이 데이터센터 IP에서 오면 429로 막는다.
+    # 정직하게 밝히는 쪽이 통과율이 높다.
+    if "reddit.com" in url:
+        return {"User-Agent": "tesla-news-brief/1.0 (RSS reader; GitHub Actions)"}
+    return {"User-Agent": USER_AGENT}
+
+
 def _fetch_one(source: tuple[str, str]) -> list[Article]:
     name, url = source
     try:
-        response = requests.get(
-            url, timeout=TIMEOUT, headers={"User-Agent": USER_AGENT}
-        )
+        response = requests.get(url, timeout=TIMEOUT, headers=_headers(url))
         response.raise_for_status()
     except requests.RequestException as exc:
         print(f"[warn] {name} 수집 실패: {exc}")
