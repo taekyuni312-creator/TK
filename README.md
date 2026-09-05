@@ -14,8 +14,18 @@
 | r/teslainvestorsclub · r/TeslaMotors · r/stocks | 개인 투자자 여론 |
 | Yahoo Finance / stooq | TSLA 시세 (전일 대비 등락) |
 
-수집한 기사는 최근 24시간 내로 거르고, 제목이 같은 중복 기사를 합친 뒤
-6개 카테고리로 나눠 보냅니다.
+수집한 기사는 최근 24시간 내로 거르고, 스팸을 걷어낸 뒤, 제목이 같은
+중복 기사를 합쳐 6개 카테고리로 나눠 보냅니다.
+
+걸러내는 스팸은 두 종류입니다.
+
+- **기관 지분공시(13F) 자동 생성 기사** — `Makes New Investment in Tesla`,
+  `Shares Sold by …`, `Acquires 12,500 Shares of …` 같은 템플릿 제목. MarketBeat
+  계열이 매일 수십 건씩 찍어냅니다.
+- **콘텐츠팜·가십 매체** — 머스크 연애사, 바이럴 영상 요약 같은 기사
+
+실적 발표, 인수 소식, `Ark Invest sells $110 million in Tesla stock` 같은 실제
+기관 매매 뉴스는 걸러지지 않습니다(테스트로 고정해 두었습니다).
 
 - 🎯 애널리스트·투자의견 (목표주가, 등급 상하향, 커버리지 개시)
 - 💰 실적·재무 (인도량, 매출, 마진, 가이던스)
@@ -75,12 +85,15 @@ python -m pytest tests -q
 
 - GitHub Actions의 `schedule`은 러너 혼잡도에 따라 **수 분에서 길게는 30분 정도 지연**될 수 있습니다. 정시 도착이 꼭 필요하면 cron을 `50 23 * * *`처럼 조금 앞당겨 두세요.
 - 공개 저장소의 예약 워크플로는 **60일간 저장소 활동이 없으면 자동 비활성화**됩니다. 알림이 끊기면 Actions 탭에서 다시 켜면 됩니다.
-- 일부 소스(Seeking Alpha, Reddit)는 데이터센터 IP를 차단하는 경우가 있습니다. 실패한 소스는 로그에 `[warn]`으로 남고 나머지 소스로 브리핑은 정상 발송됩니다.
+- 일부 소스(Seeking Alpha, Reddit, Yahoo)는 데이터센터 IP에 `429`를 돌려주는 경우가 있습니다. 실패한 소스는 로그에 `[warn]`으로 남고 나머지 소스로 브리핑은 정상 발송됩니다. 시세도 마찬가지로, 세 곳(Yahoo 2개 호스트 → stooq)을 모두 실패하면 시세 줄만 빠지고 뉴스는 그대로 갑니다.
+- 텔레그램 전송이 실패하면 워크플로가 실패로 끝나고, 로그에 텔레그램이 돌려준 사유가 그대로 남습니다. `chat not found`는 `TELEGRAM_CHAT_ID`가 틀린 것이고, `bot can't initiate conversation`은 봇에게 먼저 말을 걸지 않은 것입니다. 브라우저에서 `https://api.telegram.org/bot<토큰>/sendMessage?chat_id=<chat_id>&text=test`를 열어보면 같은 사유를 바로 확인할 수 있습니다.
 - 카카오톡은 제외했습니다. 카카오 API로 자동 발송하려면 사업자 등록 + 채널 심사가 필요하고, 심사 없이 쓸 수 있는 "나에게 보내기"도 토큰을 주기적으로 갱신해야 해서 무인 자동화에 적합하지 않습니다.
 
 ## 손보기 좋은 곳
 
 - 소스 추가/제거 → `tesla_news/feeds.py`의 `SOURCES`
+- 스팸 필터 → `tesla_news/feeds.py`의 `SPAM_TITLE`(제목 패턴), `SPAM_SOURCE`(매체 이름).
+  거슬리는 매체가 새로 보이면 `SPAM_SOURCE`에 이름 한 조각만 추가하면 됩니다
 - 카테고리 분류 키워드 → `tesla_news/report.py`의 `CATEGORIES`
 - 카테고리당 표시 개수 → `report.MAX_PER_CATEGORY` (기본 8건)
 - 발송 시각 → `.github/workflows/tesla-news-daily.yml`의 `cron` (UTC 기준)

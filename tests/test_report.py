@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from tesla_news import feeds, report
@@ -13,14 +13,8 @@ def load(name, source):
 
 
 def fresh(articles, hours=24):
-    """feeds.collect 의 필터 단계만 재현 (네트워크 없이)."""
-    cutoff = NOW.timestamp() - hours * 3600
-    return [
-        a
-        for a in articles
-        if (a.published is None or a.published.timestamp() >= cutoff)
-        and feeds.RELEVANCE.search(a.text)
-    ]
+    cutoff = NOW - timedelta(hours=hours)
+    return [a for a in articles if feeds.keep(a, cutoff)]
 
 
 def test_parse_extracts_fields_and_origin_source():
