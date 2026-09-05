@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<rss version="2.0"><channel>
+<item>
+  <title>Tesla stock surges as analyst raises price target to $500 - Reuters</title>
+  <link>https://news.google.com/rss/articles/aaa</link>
+  <pubDate>Fri, 05 Sep 2026 04:00:00 GMT</pubDate>
+  <description>&lt;p&gt;Wall Street analyst upgrade for TSLA.&lt;/p&gt;</description>
+  <source url="https://reuters.com">Reuters</source>
+</item>
+<item>
+  <title>Tesla stock surges as analyst raises price target to $500 - CNBC</title>
+  <link>https://news.google.com/rss/articles/bbb</link>
+  <pubDate>Fri, 05 Sep 2026 03:30:00 GMT</pubDate>
+  <description>Duplicate headline from another outlet.</description>
+  <source url="https://cnbc.com">CNBC</source>
+</item>
+<item>
+  <title>Tesla recalls 12,000 Cybertrucks over NHTSA probe</title>
+  <link>https://news.google.com/rss/articles/ccc</link>
+  <pubDate>Fri, 05 Sep 2026 02:00:00 GMT</pubDate>
+  <description>Regulator investigation.</description>
+  <source url="https://apnews.com">AP</source>
+</item>
+<item>
+  <title>Apple unveils new MacBook lineup</title>
+  <link>https://news.google.com/rss/articles/ddd</link>
+  <pubDate>Fri, 05 Sep 2026 01:00:00 GMT</pubDate>
+  <description>Nothing to do with cars.</description>
+  <source url="https://theverge.com">The Verge</source>
+</item>
+<item>
+  <title>Tesla Q3 deliveries beat guidance, revenue up 12%</title>
+  <link>https://news.google.com/rss/articles/eee</link>
+  <pubDate>Wed, 02 Sep 2026 01:00:00 GMT</pubDate>
+  <description>Old news outside the window.</description>
+  <source url="https://bloomberg.com">Bloomberg</source>
+</item>
+</channel></rss>

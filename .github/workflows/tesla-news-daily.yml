@@ -1,0 +1,32 @@
+name: 테슬라 데일리 뉴스
+
+on:
+  schedule:
+    # 00:00 UTC = 09:00 KST (매일)
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '전송하지 않고 로그로만 확인'
+        type: boolean
+        default: false
+
+jobs:
+  brief:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: 뉴스 수집 및 전송
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python -m tesla_news ${{ inputs.dry_run && '--dry-run' || '' }}
