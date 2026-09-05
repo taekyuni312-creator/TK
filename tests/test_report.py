@@ -81,3 +81,58 @@ def test_google_news_source_suffix_stripped_from_title():
     articles = load("google_news.xml", "Google News")
     assert articles[0].title == "Tesla stock surges as analyst raises price target to $500"
     assert articles[0].source == "Reuters"
+
+
+def korean(title, hours_ago=1, source="뉴시스"):
+    return feeds.Article(title, f"https://kr.example/{abs(hash(title))}", source, NOW - timedelta(hours=hours_ago))
+
+
+def english(title, hours_ago=1, source="Reuters"):
+    return feeds.Article(title, f"https://en.example/{abs(hash(title))}", source, NOW - timedelta(hours=hours_ago))
+
+
+def test_korean_articles_are_listed_before_foreign_ones():
+    articles = [english("Tesla stock jumps on Cybercab", 1), korean("테슬라 주가 사이버캡에 급등", 9)]
+    message = report.build(articles, None, now=NOW)
+    assert message.index("테슬라 주가 사이버캡에") < message.index("Tesla stock jumps")
+
+
+def test_highlights_rank_topics_by_coverage_with_outlet_count():
+    articles = (
+        [english(f"Tesla Cybercab robotaxi report {i}", 1, f"Outlet{i}") for i in range(6)]
+        + [english(f"Tesla analyst raises price target {i}", 2, "stocktwits") for i in range(3)]
+        + [english("Tesla opens a new store", 3)]
+    )
+    message = report.build(articles, None, now=NOW)
+    assert "📌 <b>오늘의 핵심</b>" in message
+    assert "① <b>사이버캡·로보택시</b> — 6건 / 6개 매체" in message
+    assert "② <b>목표주가·투자의견</b> — 3건 / 1개 매체" in message
+
+
+def test_highlights_omitted_when_no_topic_reaches_the_threshold():
+    message = report.build([english("Tesla opens a new store in Busan")], None, now=NOW)
+    assert "오늘의 핵심" not in message
+
+
+def test_highlight_lead_prefers_a_korean_headline():
+    articles = [english(f"Tesla Cybercab news {i}", 1) for i in range(4)] + [
+        korean("테슬라 사이버캡 오스틴 투입", 20)
+    ]
+    message = report.build(articles, None, now=NOW)
+    highlight = message.split("① ")[1]
+    assert "테슬라 사이버캡 오스틴 투입" in highlight.split("\n")[1]
+
+
+def test_split_keeps_blank_lines_at_chunk_boundaries():
+    message = "\n".join(f"line {i}" if i % 3 else "" for i in range(200))
+    chunks = report.split(message, limit=60)
+    assert "\n".join(chunks) == message
+
+
+def test_overlapping_topics_do_not_repeat_the_same_lead_article():
+    """한 기사가 여러 주제에 걸려도 대표 기사는 중복 노출되지 않는다."""
+    articles = [korean(f"테슬라 사이버캡 로보택시 FSD 자율주행 소식 {i}", i + 1) for i in range(6)]
+    message = report.build(articles, None, now=NOW)
+    leads = [line.strip() for line in message.split("\n") if line.startswith("   <a")]
+    assert len(leads) >= 2
+    assert len(set(leads)) == len(leads)
