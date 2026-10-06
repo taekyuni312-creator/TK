@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html
 import re
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from .feeds import Article
@@ -12,9 +13,20 @@ from .quote import Quote
 KST = timezone(timedelta(hours=9))
 WEEKDAYS = "월화수목금토일"
 MAX_MESSAGE = 3800  # 텔레그램 4096자 제한 대비 여유
-MAX_PER_CATEGORY = 5
+MAX_PER_CATEGORY = 4
 
 KOREAN = re.compile(r"[가-힣]")
+
+@dataclass
+class Story:
+    """같은 사건을 다룬 기사 묶음. 대표 하나만 보여주고 나머지는 매체 수로 센다."""
+
+    lead: Article
+    members: list[Article]
+
+    @property
+    def outlets(self) -> int:
+        return len({article.source for article in self.members})
 
 # (카테고리 이름, 매칭 정규식). 위에서부터 먼저 걸리는 카테고리로 분류된다.
 CATEGORIES: list[tuple[str, re.Pattern]] = [
@@ -79,8 +91,8 @@ TOPICS: list[tuple[str, re.Pattern]] = [
     ("중국·관세", re.compile(r"china|tariff|중국|관세", re.I)),
     ("모델Y·모델3", re.compile(r"model [3y]|모델\s*[3y]|모델와이", re.I)),
 ]
-MIN_TOPIC_HITS = 3
-MAX_TOPICS = 3
+MIN_HIGHLIGHT_OUTLETS = 3  # 핵심에 올리려면 이만큼의 매체가 다뤄야 한다
+MAX_HIGHLIGHTS = 3
 
 
 def _is_korean(article: Article) -> bool:
@@ -116,7 +128,40 @@ def dedupe(articles: list[Article]) -> list[Article]:
     return unique
 
 
-def categorize(articles: list[Article]) -> dict[str, list[Article]]:
+def topic_of(article: Article) -> str | None:
+    """기사가 속한 주제. TOPICS 순서가 곧 우선순위다."""
+    return next((name for name, pattern in TOPICS if pattern.search(article.text)), None)
+
+
+def condense(articles: list[Article]) -> list[Story]:
+    """한 섹터 안에서 같은 주제의 기사를 한 줄로 합친다.
+
+    제목 유사도로 '같은 사건'을 찾는 방법도 재봤지만, 같은 사건과 다른 사건의
+    경계가 0.05밖에 안 벌어져 실제 데이터에서 오인식이 난다. 손으로 추린
+    TOPICS 쪽이 결정적이고 왜 묶였는지 설명도 된다.
+
+    묶기는 섹터 안에서만 한다. 주제만으로 전체를 묶으면 그날 지배적인 주제가
+    실적·목표주가 기사까지 전부 빨아들인다.
+    """
+    grouped: dict[str, list[Article]] = {}
+    singles: list[Story] = []
+    for article in articles:
+        topic = topic_of(article)
+        if topic is None:
+            singles.append(Story(article, [article]))
+        else:
+            grouped.setdefault(topic, []).append(article)
+    merged = [Story(min(members, key=_reading_order), members) for members in grouped.values()]
+    return sorted(merged + singles, key=_importance)
+
+
+def _importance(story: Story) -> tuple:
+    """많은 매체가 다룬 사건 먼저, 그다음 한국어, 그다음 최신순."""
+    return (-story.outlets, not _is_korean(story.lead), -_when(story.lead))
+
+
+def categorize(articles: list[Article]) -> dict[str, list[Story]]:
+    """섹터로 나눈 뒤, 각 섹터 안에서 주제별로 합친다."""
     buckets: dict[str, list[Article]] = {}
     for article in articles:
         if COMMUNITY_SOURCES.search(article.source):
@@ -124,21 +169,16 @@ def categorize(articles: list[Article]) -> dict[str, list[Article]]:
         else:
             name = next(n for n, pattern in CATEGORIES if pattern.search(article.text))
         buckets.setdefault(name, []).append(article)
-
-    for bucket in buckets.values():
-        bucket.sort(key=_reading_order)
-    return buckets
+    return {name: condense(items) for name, items in buckets.items()}
 
 
-def top_topics(articles: list[Article]) -> list[tuple[str, list[Article]]]:
-    """오늘 가장 많이 보도된 주제 순으로. 최소 건수를 못 넘기면 뺀다."""
-    hits = [(name, [a for a in articles if pattern.search(a.text)]) for name, pattern in TOPICS]
+def headline_stories(buckets: dict[str, list[Story]]) -> list[tuple[str, Story]]:
+    """여러 매체가 동시에 다룬 묶음 순으로. 섹터 이름을 라벨로 함께 돌려준다."""
     ranked = sorted(
-        (hit for hit in hits if len(hit[1]) >= MIN_TOPIC_HITS),
-        key=lambda hit: len(hit[1]),
-        reverse=True,
+        ((name, story) for name, bucket in buckets.items() for story in bucket),
+        key=lambda pair: _importance(pair[1]),
     )
-    return ranked[:MAX_TOPICS]
+    return [pair for pair in ranked if pair[1].outlets >= MIN_HIGHLIGHT_OUTLETS][:MAX_HIGHLIGHTS]
 
 
 def _ago(published: datetime | None, now: datetime) -> str:
@@ -168,21 +208,21 @@ def _link(article: Article) -> str:
     return f'<a href="{url}">{title}</a>'
 
 
-def _highlights(articles: list[Article]) -> list[str]:
-    ranked = top_topics(articles)
+def _highlights(buckets: dict[str, list[Story]], used: set[str]) -> list[str]:
+    """오늘의 핵심. 여기에 쓴 묶음은 `used`에 담아 아래 목록에서 빠지게 한다.
+
+    라벨은 그 묶음이 속한 섹터 이름이다. 주제명을 붙이면 묶음이 여러 주제에
+    걸릴 때 기사와 안 맞는 라벨이 나온다.
+    """
+    ranked = headline_stories(buckets)
     if not ranked:
         return []
 
     lines = ["📌 <b>오늘의 핵심</b>"]
-    used: set[str] = set()
-    for number, (name, bucket) in zip("①②③", ranked):
-        outlets = len({article.source for article in bucket})
-        # 주제가 겹치면 대표 기사도 겹치므로, 아직 안 쓴 기사를 우선 고른다.
-        ordered = sorted(bucket, key=_reading_order)
-        lead = next((a for a in ordered if a.url not in used), ordered[0])
-        used.add(lead.url)
-        lines.append(f"{number} <b>{name}</b> — {len(bucket)}건 / {outlets}개 매체")
-        lines.append(f"   {_link(lead)}")
+    for number, (name, story) in zip("①②③", ranked):
+        used.add(story.lead.url)
+        lines.append(f"{number} <b>{name}</b> · {story.outlets}개 매체가 보도")
+        lines.append(f"   {_link(story.lead)}")
     lines.append("")
     return lines
 
@@ -199,23 +239,29 @@ def build(articles: list[Article], quote: Quote | None, now: datetime | None = N
         lines.append("최근 24시간 내 수집된 기사가 없습니다.")
         return "\n".join(lines)
 
-    lines += _highlights(unique)
-
     buckets = categorize(unique)
+    shown: set[str] = set()
+    lines += _highlights(buckets, shown)
+
     for name in [n for n, _ in CATEGORIES] + [COMMUNITY]:
-        bucket = buckets.get(name)
+        # 오늘의 핵심에 이미 올라간 묶음은 빼서 같은 기사를 두 번 읽지 않게 한다.
+        bucket = [s for s in buckets.get(name, []) if s.lead.url not in shown]
         if not bucket:
             continue
         lines.append(f"<b>{name}</b> ({len(bucket)}건)")
-        for article in bucket[:MAX_PER_CATEGORY]:
-            flag = "🇰🇷" if _is_korean(article) else "🌐"
-            meta = f"{html.escape(article.source, quote=False)} · {_ago(article.published, now)}"
-            lines.append(f"{flag} {_link(article)}\n     <i>{meta}</i>")
+        for story in bucket[:MAX_PER_CATEGORY]:
+            lead = story.lead
+            flag = "🇰🇷" if _is_korean(lead) else "🌐"
+            meta = f"{html.escape(lead.source, quote=False)} · {_ago(lead.published, now)}"
+            if story.outlets > 1:
+                meta += f" · <b>+{story.outlets - 1}개 매체</b>"
+            lines.append(f"{flag} {_link(lead)}\n     <i>{meta}</i>")
         if len(bucket) > MAX_PER_CATEGORY:
             lines.append(f"     <i>… 외 {len(bucket) - MAX_PER_CATEGORY}건</i>")
         lines.append("")
 
-    lines.append(f"총 {len(unique)}건 수집")
+    issues = sum(len(bucket) for bucket in buckets.values())
+    lines.append(f"{issues}개 이슈 · 기사 {len(unique)}건")
     return "\n".join(lines)
 
 
